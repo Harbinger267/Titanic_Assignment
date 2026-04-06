@@ -218,3 +218,145 @@ cleaned\_df = pd.read\_csv('../data/train\_cleaned.csv')
 
 cleaned\_df.head()
 
+
+\#Section 2: Feature Engineering
+
+Feature engineering means creating useful variables from existing cleaned data so the model can identify stronger survival patterns.
+
+\## 2.1: Family based features
+
+\###Method used
+Passengers travelling alone and passengers travelling with relatives may have different survival behavior.
+
+\###Features created
+1. FamilySize = SibSp + Parch + 1
+2. IsAlone = 1 if FamilySize == 1 else 0
+
+\###Code
+feature\_df = pd.read\_csv('../data/train\_cleaned.csv')
+
+feature\_df\['FamilySize'] = feature\_df\['SibSp'] + feature\_df\['Parch'] + 1
+feature\_df\['IsAlone'] = (feature\_df\['FamilySize'] == 1).astype(int)
+
+feature\_df\[\['SibSp','Parch','FamilySize','IsAlone']].head()
+
+
+\## 2.2: Title standardization
+
+\###Method used
+Some title labels refer to the same social group but are written differently, so they are merged.
+
+\###Code
+feature\_df\['Title'] = feature\_df\['Title'].replace({
+    'Mlle': 'Miss',
+    'Ms': 'Miss',
+    'Mme': 'Mrs'
+})
+
+feature\_df\['Title'].value\_counts()
+
+
+\## 2.3: Age grouping
+
+\###Method used
+Age is grouped into meaningful bands so models can capture age-category trends.
+
+\###Code
+feature\_df\['AgeGroup'] = pd.cut(
+    feature\_df\['Age'],
+    bins=\[0, 12, 19, 59, float('inf')],
+    labels=\['Child','Teen','Adult','Senior'],
+    include\_lowest=True
+)
+
+feature\_df\[\['Age','AgeGroup']].sample(10)
+
+
+\## 2.4: Ticket prefix and Fare per person
+
+\###Method used
+Ticket prefix can carry booking information; fare is normalized by family size for better comparability.
+
+\###Code
+feature\_df\['TicketPrefix'] = (
+    feature\_df\['Ticket']
+    .astype(str)
+    .str.replace(r'\\d+', '', regex=True)
+    .str.replace(r'[./]', '', regex=True)
+    .str.replace(' ', '', regex=False)
+    .replace('', 'NUM')
+)
+
+feature\_df\['FarePerPerson'] = feature\_df\['Fare'] / feature\_df\['FamilySize']
+
+feature\_df\[\['Ticket','TicketPrefix','Fare','FamilySize','FarePerPerson']].head()
+
+
+\## 2.Final: Saving engineered dataset
+
+feature\_df.to\_csv('../data/train\_featured.csv', index=False)
+
+featured\_df = pd.read\_csv('../data/train\_featured.csv')
+featured\_df.head()
+
+
+\#Section 3: Feature Selection
+
+Feature selection means identifying the most informative variables to reduce noise before modeling.
+
+\## 3.1: Build candidate model frame
+
+\###Method used
+Use cleaned + engineered variables and convert categorical features into numeric format for machine learning.
+
+\###Code
+model\_df = featured\_df\[\[
+    'Survived','Pclass','Sex','Age','Fare\_log','Embarked','Deck',
+    'Title','FamilySize','IsAlone','AgeGroup','FarePerPerson'
+\]\].copy()
+
+model\_df = pd.get\_dummies(
+    model\_df,
+    columns=\['Sex','Embarked','Deck','Title','AgeGroup'],
+    drop\_first=True
+)
+
+model\_df.head()
+
+
+\## 3.2: Ranking important features
+
+\###Method used
+Use correlation overview and mutual information with SelectKBest to rank predictive variables.
+
+\###Code
+X = model\_df.drop('Survived', axis=1)
+y = model\_df\['Survived']
+
+correlations = model\_df.corr(numeric\_only=True)\['Survived'].sort\_values(ascending=False)
+correlations
+
+from sklearn.feature\_selection import SelectKBest, mutual\_info\_classif
+
+selector = SelectKBest(score\_func=mutual\_info\_classif, k=10)
+selector.fit(X, y)
+
+selected\_features = X.columns\[selector.get\_support()]
+selected\_features
+
+
+\## 3.3: Final selected dataset
+
+\###Code
+selected\_df = pd.concat(\[y, X\[selected\_features]], axis=1)
+selected\_df.head()
+
+selected\_df.to\_csv('../data/train\_selected.csv', index=False)
+
+
+\## 3.Final: Summary
+1. Engineered features created: FamilySize, IsAlone, AgeGroup, TicketPrefix, FarePerPerson.
+2. Title labels were standardized.
+3. Feature selection retained the strongest model-ready variables.
+4. Final dataset saved as train\_selected.csv.
+
